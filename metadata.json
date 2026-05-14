@@ -1,6 +1,6 @@
 {
   "name": "NovEra AI",
   "description": "NovEra şirkəti tərəfindən yaradılmış qabaqcıl süni intellekt çat tətbiqi.",
-  "requestFramePermissions": ["microphone"],
+  "requestFramePermissions": [],
   "majorCapabilities": []
 }
