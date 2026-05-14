@@ -1,0 +1,76 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == request.auth.uid &&
+               data.email is string && data.email.size() <= 256;
+      }
+
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && 
+                    isValidUser(request.resource.data) && 
+                    request.resource.data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+                    request.resource.data.createdAt is timestamp;
+      allow update: if isOwner(userId) && 
+                    isValidUser(request.resource.data) &&
+                    request.resource.data.uid == resource.data.uid &&
+                    request.resource.data.email == resource.data.email &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'uid', 'email', 'createdAt']);
+    }
+
+    // Chat Rules
+    match /users/{userId}/chats/{chatId} {
+      function isValidChat(data) {
+        return data.keys().hasAll(['userId', 'title', 'createdAt', 'updatedAt']) &&
+               data.userId == request.auth.uid &&
+               data.title is string && data.title.size() <= 500 &&
+               data.createdAt is timestamp &&
+               data.updatedAt is timestamp;
+      }
+
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(chatId) && isValidChat(request.resource.data);
+      allow update: if isOwner(userId) && 
+                    isValidChat(request.resource.data) &&
+                    request.resource.data.userId == resource.data.userId &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'updatedAt', 'userId', 'createdAt']);
+      allow delete: if isOwner(userId);
+
+      // Message Rules
+      match /messages/{messageId} {
+        function isValidMessage(data) {
+          return data.keys().hasAll(['role', 'text', 'createdAt']) &&
+                 data.role in ['user', 'bot'] &&
+                 data.text is string && data.text.size() <= 10000 &&
+                 data.createdAt is timestamp;
+        }
+
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(messageId) && isValidMessage(request.resource.data);
+      }
+    }
+  }
+}
